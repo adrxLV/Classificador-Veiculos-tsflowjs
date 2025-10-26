@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classificador de Veículos</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
+</head>
+<body>
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">ℹ️ Informação</h2>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Este classificador foi treinado especificamente para reconhecer <strong>4 categorias de veículos</strong>:</p>
+        <ul style="text-align: left; display: inline-block;">
+          <li>✈️ Avião Militar</li>
+          <li>✈️ Avião Civil</li>
+          <li>🚗 Carro Civil</li>
+          <li>🚓 Carro Militar</li>
+        </ul>
+        <p style="margin-top: 1rem;">O modelo pode não ter precisão com outros tipos de veículos ou objetos.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="close-modal-btn" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container initial-state">
+    <!-- HEADER -->
+    <header>
+      <h1>Classificador de Veículos</h1>
+      <button class="info-btn" onclick="openModal()" title="Informações">ℹ️</button>
+    </header>
+
+    <!-- Coluna da Esquerda -->
+    <div class="upload-section centered">
+      <button class="upload-btn" onclick="document.getElementById('imageUpload').click()">
+        📤 Selecionar Imagem
+      </button>
+      <input type="file" id="imageUpload" accept="image/*">
+
+      <div class="preview-section" id="previewSection">
+        <img id="preview" src="" alt="Pré-visualização">
+      </div>
+    </div>
+
+    <!-- Coluna da direita -->
+    <div id="resultsColumn" class="results-column" style="display: none;">
+      <div class="result-section" id="resultSection">
+        <!-- Resultado -->
+        <div class="main-result">
+          <div class="main-result-label">Resultado Principal</div>
+          <div class="main-result-value" id="mainLabel">—</div>
+          <div class="main-result-confidence" id="mainConfidence">—</div>
+        </div>
+
+        <!-- Barras de Confiança -->
+        <div class="confidence-section">
+          <div class="confidence-section-title">Confiança por Categoria</div>
+          <div id="confidenceList"></div>
+        </div>
+      </div>
+
+      <!-- LOADING  -->
+      <div class="loading" id="loadingState" style="display: none;">
+        <span class="spinner"></span> Processando...
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT -->
+  <script>
+    const labels = ["Avião Militar", "Avião Civil", "Carro Civil", "Carro Militar"];
+    const labelEmojis = {
+      "Avião Militar": "✈️",
+      "Avião Civil": "✈️",
+      "Carro Civil": "🚗",
+      "Carro Militar": "🚓"
+    };
+    let model;
+    function openModal() {
+      document.getElementById("modal").classList.add("show");
+    }
+
+    function closeModal() {
+      document.getElementById("modal").classList.remove("show");
+    }
+
+    window.onclick = function(event) {
+      const modal = document.getElementById("modal");
+      if (event.target === modal) {
+        closeModal();
+      }
+    }
+
+    // carregar o modelo
+    async function loadModel() {
+      try {
+        model = await tf.loadLayersModel("http://localhost:8080/model.json");
+        console.log("✅ Modelo carregado");
+      } catch (err) {
+        console.error("Erro ao carregar modelo:", err);
+      }
+    }
+
+    // PREVER
+    async function predictImage(img) {
+      if (!model) {
+        alert("Modelo ainda não foi carregado!");
+        return;
+      }
+
+      document.getElementById("loadingState").style.display = "block";
+      document.getElementById("resultSection").classList.remove("show");
+
+      try {
+        const tensor = tf.browser.fromPixels(img)
+          .resizeNearestNeighbor([224, 224])
+          .toFloat()
+          .div(tf.scalar(255))
+          .expandDims();
+
+        const prediction = await model.predict(tensor).data();
+        const predictionArray = Array.from(prediction);
+        const maxIndex = predictionArray.indexOf(Math.max(...predictionArray));
+        const confidence = (predictionArray[maxIndex] * 100).toFixed(1);
+
+        // Resultado principal
+        const label = labels[maxIndex];
+        const emoji = labelEmojis[label];
+        document.getElementById("mainLabel").textContent = `${emoji} ${label}`;
+        document.getElementById("mainConfidence").textContent = `Confiança: ${confidence}%`;
+
+        // Barras de Confiança
+        const confidenceList = document.getElementById("confidenceList");
+        confidenceList.innerHTML = "";
+
+        predictionArray.forEach((conf, i) => {
+          const percentage = (conf * 100).toFixed(1);
+          const emoji = labelEmojis[labels[i]];
+          
+          confidenceList.innerHTML += `
+            <div class="confidence-item">
+              <div class="confidence-label">
+                <span>${emoji} ${labels[i]}</span>
+                <span>${percentage}%</span>
+              </div>
+              <div class="confidence-bar">
+                <div class="confidence-fill" style="width: ${percentage}%"></div>
+              </div>
+            </div>
+          `;
+        });
+
+        document.getElementById("loadingState").style.display = "none";
+        document.getElementById("resultSection").classList.add("show");
+
+        tensor.dispose();
+      } catch (error) {
+        console.error("Erro:", error);
+        document.getElementById("loadingState").style.display = "none";
+      }
+    }
+
+    // upload do ficheiro
+    document.getElementById("imageUpload").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const container = document.querySelector(".container");
+      const uploadSection = document.querySelector(".upload-section");
+      const resultsColumn = document.getElementById("resultsColumn");
+
+      // mudar para o layout de duas colunas dps de selecionar a imagem
+    
+      container.classList.remove("initial-state");
+      uploadSection.classList.remove("centered");
+      resultsColumn.style.display = "block";
+
+      const img = document.getElementById("preview");
+      img.src = URL.createObjectURL(file);
+      document.getElementById("previewSection").classList.add("show");
+
+      img.onload = () => predictImage(img);
+    });
+
+    document.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      document.body.classList.add("dragover");
+    });
+
+    document.addEventListener("dragleave", () => {
+      document.body.classList.remove("dragover");
+    });
+
+    document.addEventListener("drop", (e) => {
+      e.preventDefault();
+      document.body.classList.remove("dragover");
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type.startsWith("image/")) {
+        document.getElementById("imageUpload").files = files;
+        const event = new Event("change", { bubbles: true });
+        document.getElementById("imageUpload").dispatchEvent(event);
+      }
+    });
+
+    loadModel();
+  </script>
+</body>
+</html>
