@@ -8,3 +8,4 @@ Um projeto frontend que demonstra um classificador de veículos executado no nav
 - Layout responsivo
 
 ## Licença
+MIT License
